@@ -9,7 +9,7 @@
 #include <time.h>
 
 #define BUF_SIZE 100
-#define MYPORT 3501
+#define MYPORT 3502
 #define MAX_CLNT 100
 
 void *handle_clnt(void *arg);
@@ -85,6 +85,9 @@ void *handle_clnt(void *arg) {
     }
     name[str_len] = '\0';
 
+    snprintf(msg, BUF_SIZE, "[%s] is Join", name);
+    send_msg(msg, strlen(msg));
+
     while ((str_len = read(clnt_sock, msg, sizeof(msg))) != 0) {
         snprintf(msg + str_len, BUF_SIZE - str_len, " [%s]", name);
         send_msg(msg, str_len + strlen(name) + 3);
@@ -102,6 +105,10 @@ void *handle_clnt(void *arg) {
     }
     clnt_cnt--;
     pthread_mutex_unlock(&mutx);
+
+    snprintf(msg, BUF_SIZE, "[%s] is Left", name);
+    send_msg(msg, strlen(msg));
+
     close(clnt_sock);
     return NULL;
 }
@@ -128,10 +135,9 @@ char *serverState(int count) {
     strcpy(stateMsg, "None");
 
     if (count < 5)
-        strcpy(stateMsg, "Connect Success");
+        strcpy(stateMsg, "Connect Success\n");
     else
         strcpy(stateMsg, "Connect Fail");
 
     return stateMsg;
 }
-
