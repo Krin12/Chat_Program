@@ -74,14 +74,26 @@ int main(int argc, char *argv[]) {
 
 void *handle_clnt(void *arg) {
     int clnt_sock = *((int*)arg);
-    int str_len = 0, i;
+    int str_len = 0;
+    char name[BUF_SIZE];
     char msg[BUF_SIZE];
 
-    while ((str_len = read(clnt_sock, msg, sizeof(msg))) != 0)
-        send_msg(msg, str_len);
+    if ((str_len = read(clnt_sock, name, sizeof(name))) == 0) {
+        perror("read name error");
+        close(clnt_sock);
+        return NULL;
+    }
+    name[str_len] = '\0';
+
+    while ((str_len = read(clnt_sock, msg, sizeof(msg))) != 0) {
+        snprintf(msg + str_len, BUF_SIZE - str_len, " [%s]", name);
+        send_msg(msg, str_len + strlen(name) + 3);
+
+        memset(msg, 0, sizeof(msg));
+    }
 
     pthread_mutex_lock(&mutx);
-    for (i = 0; i < clnt_cnt; i++) {
+    for (int i = 0; i < clnt_cnt; i++) {
         if (clnt_sock == clnt_socks[i]) {
             while (i++ < clnt_cnt - 1)
                 clnt_socks[i] = clnt_socks[i + 1];

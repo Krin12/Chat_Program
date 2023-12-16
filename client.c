@@ -13,96 +13,13 @@ GtkWidget *text_view;
 GtkWidget *entry;
 GtkWidget *ip_entry;
 GtkWidget *port_entry;
+GtkWidget *name_entry;
 int client_socket;
 
-void *recv_message(void *arg) {
-    char recv_buf[BUF_SIZE];
-    while (1) {
-        int str_len = read(client_socket, recv_buf, sizeof(recv_buf));
-        if (str_len <= 0)
-            break;
-
-        recv_buf[str_len] = '\0';
-
-        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
-        GtkTextIter iter;
-        gtk_text_buffer_get_end_iter(buffer, &iter);
-
-        // Add a new line before each message
-        if (!gtk_text_iter_starts_line(&iter))
-            gtk_text_buffer_insert(buffer, &iter, "\n", 1);
-
-        gtk_text_buffer_insert(buffer, &iter, recv_buf, -1);
-    }
-    close(client_socket);
-    exit(0);
-}
-
-static void connect_to_server(GtkWidget *widget, gpointer data) {
-    const gchar *server_ip = gtk_entry_get_text(GTK_ENTRY(ip_entry));
-    const gchar *server_port = gtk_entry_get_text(GTK_ENTRY(port_entry));
-
-    client_socket = socket(AF_INET, SOCK_STREAM, 0);
-
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(server_ip);
-    server_addr.sin_port = htons(atoi(server_port));
-
-    if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
-        perror("connect() error");
-        exit(1);
-    }
-
-    pthread_t recv_thread;
-    pthread_create(&recv_thread, NULL, recv_message, NULL);
-
-    gtk_widget_destroy(GTK_WIDGET(data)); // Close the connection dialog
-}
-
-static void show_connection_dialog(GtkWidget *widget, gpointer data) {
-    GtkWidget *dialog;
-    GtkWidget *content_area;
-    GtkWidget *label_ip, *label_port;
-
-    dialog = gtk_dialog_new_with_buttons("Connect to Server",
-                                         GTK_WINDOW(data),
-                                         GTK_DIALOG_MODAL,
-                                         "Connect",
-                                         GTK_RESPONSE_ACCEPT,
-                                         "Cancel",
-                                         GTK_RESPONSE_CANCEL,
-                                         NULL);
-
-    content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-
-    label_ip = gtk_label_new("Server IP:");
-    ip_entry = gtk_entry_new();
-    gtk_box_pack_start(GTK_BOX(content_area), label_ip, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(content_area), ip_entry, FALSE, FALSE, 0);
-
-    label_port = gtk_label_new("Server Port:");
-    port_entry = gtk_entry_new();
-    gtk_box_pack_start(GTK_BOX(content_area), label_port, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(content_area), port_entry, FALSE, FALSE, 0);
-
-    gtk_widget_show_all(dialog);
-
-    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
-
-    if (response == GTK_RESPONSE_ACCEPT) {
-        connect_to_server(widget, dialog);
-    } else {
-        gtk_widget_destroy(dialog);
-    }
-}
-
-static void send_message(GtkWidget *widget, gpointer data) {
-    const gchar *message = gtk_entry_get_text(GTK_ENTRY(entry));
-    write(client_socket, message, strlen(message));
-    gtk_entry_set_text(GTK_ENTRY(entry), "");
-}
+void *recv_message(void *arg);
+void connect_to_server(GtkWidget *widget, gpointer data);
+void show_connection_dialog(GtkWidget *widget, gpointer data);
+void send_message(GtkWidget *widget, gpointer data);
 
 int main(int argc, char *argv[]) {
     GtkWidget *window;
@@ -147,3 +64,103 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
+void *recv_message(void *arg) {
+    char recv_buf[BUF_SIZE];
+    while (1) {
+        int str_len = read(client_socket, recv_buf, sizeof(recv_buf));
+        if (str_len <= 0)
+            break;
+
+        recv_buf[str_len] = '\0';
+
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
+        GtkTextIter iter;
+        gtk_text_buffer_get_end_iter(buffer, &iter);
+
+        if (!gtk_text_iter_starts_line(&iter))
+            gtk_text_buffer_insert(buffer, &iter, "\n", 1);
+
+        gtk_text_buffer_insert(buffer, &iter, recv_buf, -1);
+    }
+    close(client_socket);
+    exit(0);
+}
+
+void connect_to_server(GtkWidget *widget, gpointer data) {
+    const gchar *server_ip = gtk_entry_get_text(GTK_ENTRY(ip_entry));
+    const gchar *server_port = gtk_entry_get_text(GTK_ENTRY(port_entry));
+    const gchar *client_name = gtk_entry_get_text(GTK_ENTRY(name_entry));
+
+    if (client_socket != 0) {
+        g_print("이미 서버에 연결되어 있습니다.\n");
+        return;
+    }
+
+    client_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(server_ip);
+    server_addr.sin_port = htons(atoi(server_port));
+
+    if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+        perror("connect() error");
+        exit(1);
+    }
+
+    pthread_t recv_thread;
+    pthread_create(&recv_thread, NULL, recv_message, NULL);
+
+    char name_msg[BUF_SIZE];
+    snprintf(name_msg, sizeof(name_msg), "%s\n", client_name);
+    write(client_socket, name_msg, strlen(name_msg));
+}
+
+void show_connection_dialog(GtkWidget *widget, gpointer data) {
+    GtkWidget *dialog;
+    GtkWidget *content_area;
+    GtkWidget *label_ip, *label_port, *label_name;
+
+    dialog = gtk_dialog_new_with_buttons("서버에 연결",
+                                         GTK_WINDOW(data),
+                                         GTK_DIALOG_MODAL,
+                                         "Connect",
+                                         GTK_RESPONSE_ACCEPT,
+                                         "Cancel",
+                                         GTK_RESPONSE_CANCEL,
+                                         NULL);
+
+    content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+
+    label_ip = gtk_label_new("서버 IP:");
+    ip_entry = gtk_entry_new();
+    gtk_box_pack_start(GTK_BOX(content_area), label_ip, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_area), ip_entry, FALSE, FALSE, 0);
+
+    label_port = gtk_label_new("서버 포트:");
+    port_entry = gtk_entry_new();
+    gtk_box_pack_start(GTK_BOX(content_area), label_port, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_area), port_entry, FALSE, FALSE, 0);
+
+    label_name = gtk_label_new("사용자 이름:");
+    name_entry = gtk_entry_new();
+    gtk_box_pack_start(GTK_BOX(content_area), label_name, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_area), name_entry, FALSE, FALSE, 0);
+
+    gtk_widget_show_all(dialog);
+
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+
+    if (response == GTK_RESPONSE_ACCEPT) {
+        connect_to_server(widget, dialog);
+    } else {
+        gtk_widget_destroy(dialog);
+    }
+}
+
+void send_message(GtkWidget *widget, gpointer data) {
+    const gchar *message = gtk_entry_get_text(GTK_ENTRY(entry));
+    write(client_socket, message, strlen(message));
+    gtk_entry_set_text(GTK_ENTRY(entry), "");
+}
