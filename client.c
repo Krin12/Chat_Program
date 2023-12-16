@@ -11,6 +11,8 @@
 
 GtkWidget *text_view;
 GtkWidget *entry;
+GtkWidget *ip_entry;
+GtkWidget *port_entry;
 int client_socket;
 
 void *recv_message(void *arg) {
@@ -25,7 +27,7 @@ void *recv_message(void *arg) {
         GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
         GtkTextIter iter;
         gtk_text_buffer_get_end_iter(buffer, &iter);
-        
+
         // Add a new line before each message
         if (!gtk_text_iter_starts_line(&iter))
             gtk_text_buffer_insert(buffer, &iter, "\n", 1);
@@ -34,6 +36,66 @@ void *recv_message(void *arg) {
     }
     close(client_socket);
     exit(0);
+}
+
+static void connect_to_server(GtkWidget *widget, gpointer data) {
+    const gchar *server_ip = gtk_entry_get_text(GTK_ENTRY(ip_entry));
+    const gchar *server_port = gtk_entry_get_text(GTK_ENTRY(port_entry));
+
+    client_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(server_ip);
+    server_addr.sin_port = htons(atoi(server_port));
+
+    if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+        perror("connect() error");
+        exit(1);
+    }
+
+    pthread_t recv_thread;
+    pthread_create(&recv_thread, NULL, recv_message, NULL);
+
+    gtk_widget_destroy(GTK_WIDGET(data)); // Close the connection dialog
+}
+
+static void show_connection_dialog(GtkWidget *widget, gpointer data) {
+    GtkWidget *dialog;
+    GtkWidget *content_area;
+    GtkWidget *label_ip, *label_port;
+
+    dialog = gtk_dialog_new_with_buttons("Connect to Server",
+                                         GTK_WINDOW(data),
+                                         GTK_DIALOG_MODAL,
+                                         "Connect",
+                                         GTK_RESPONSE_ACCEPT,
+                                         "Cancel",
+                                         GTK_RESPONSE_CANCEL,
+                                         NULL);
+
+    content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+
+    label_ip = gtk_label_new("Server IP:");
+    ip_entry = gtk_entry_new();
+    gtk_box_pack_start(GTK_BOX(content_area), label_ip, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_area), ip_entry, FALSE, FALSE, 0);
+
+    label_port = gtk_label_new("Server Port:");
+    port_entry = gtk_entry_new();
+    gtk_box_pack_start(GTK_BOX(content_area), label_port, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_area), port_entry, FALSE, FALSE, 0);
+
+    gtk_widget_show_all(dialog);
+
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+
+    if (response == GTK_RESPONSE_ACCEPT) {
+        connect_to_server(widget, dialog);
+    } else {
+        gtk_widget_destroy(dialog);
+    }
 }
 
 static void send_message(GtkWidget *widget, gpointer data) {
@@ -47,6 +109,7 @@ int main(int argc, char *argv[]) {
     GtkWidget *vbox;
     GtkWidget *hbox;
     GtkWidget *button;
+    GtkWidget *connect_button;
     pthread_t recv_thread;
 
     gtk_init(&argc, &argv);
@@ -73,22 +136,11 @@ int main(int argc, char *argv[]) {
     g_signal_connect(button, "clicked", G_CALLBACK(send_message), NULL);
     gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
 
+    connect_button = gtk_button_new_with_label("Connect");
+    g_signal_connect(connect_button, "clicked", G_CALLBACK(show_connection_dialog), window);
+    gtk_box_pack_start(GTK_BOX(hbox), connect_button, FALSE, FALSE, 0);
+
     gtk_widget_show_all(window);
-
-    client_socket = socket(AF_INET, SOCK_STREAM, 0);
-
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
-    server_addr.sin_port = htons(SERVER_PORT);
-
-    if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
-        perror("connect() error");
-        exit(1);
-    }
-
-    pthread_create(&recv_thread, NULL, recv_message, NULL);
 
     gtk_main();
 
