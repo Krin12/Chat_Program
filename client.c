@@ -6,8 +6,6 @@
 #include <pthread.h>
 
 #define BUF_SIZE 100
-#define SERVER_IP "127.0.0.1"
-#define SERVER_PORT 3428
 
 GtkWidget *text_view;
 GtkWidget *entry;
@@ -33,6 +31,7 @@ int main(int argc, char *argv[]) {
 
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "Chat Client");
+    gtk_window_set_default_size(GTK_WINDOW(window), 400, 300);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
     vbox = gtk_vbox_new(FALSE, 5);
@@ -115,6 +114,8 @@ void connect_to_server(GtkWidget *widget, gpointer data) {
     char name_msg[BUF_SIZE];
     snprintf(name_msg, sizeof(name_msg), "%s", client_name);
     write(client_socket, name_msg, strlen(name_msg));
+    
+    gtk_widget_destroy(GTK_WIDGET(data));
 }
 
 void show_connection_dialog(GtkWidget *widget, gpointer data) {

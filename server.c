@@ -128,9 +128,9 @@ char *serverState(int count) {
     strcpy(stateMsg, "None");
 
     if (count < 5)
-        strcpy(stateMsg, "Good");
+        strcpy(stateMsg, "Connect Success");
     else
-        strcpy(stateMsg, "Bad");
+        strcpy(stateMsg, "Connect Fail");
 
     return stateMsg;
 }
