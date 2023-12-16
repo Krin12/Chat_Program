@@ -113,7 +113,7 @@ void connect_to_server(GtkWidget *widget, gpointer data) {
     pthread_create(&recv_thread, NULL, recv_message, NULL);
 
     char name_msg[BUF_SIZE];
-    snprintf(name_msg, sizeof(name_msg), "%s\n", client_name);
+    snprintf(name_msg, sizeof(name_msg), "%s", client_name);
     write(client_socket, name_msg, strlen(name_msg));
 }
 

@@ -9,7 +9,7 @@
 #include <time.h>
 
 #define BUF_SIZE 100
-#define MYPORT 3428
+#define MYPORT 3501
 #define MAX_CLNT 100
 
 void *handle_clnt(void *arg);
