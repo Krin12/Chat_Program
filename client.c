@@ -6,18 +6,21 @@
 #include <pthread.h>
 
 #define BUF_SIZE 100
+#define FILE_BUF_SIZE 1024
 
 GtkWidget *text_view;
 GtkWidget *entry;
 GtkWidget *ip_entry;
 GtkWidget *port_entry;
 GtkWidget *name_entry;
+GtkWidget *file_chooser;
 int client_socket;
 
 void *recv_message(void *arg);
 void connect_to_server(GtkWidget *widget, gpointer data);
 void show_connection_dialog(GtkWidget *widget, gpointer data);
 void send_message(GtkWidget *widget, gpointer data);
+void send_file(GtkWidget *widget, gpointer data);
 
 int main(int argc, char *argv[]) {
     GtkWidget *window;
@@ -25,6 +28,7 @@ int main(int argc, char *argv[]) {
     GtkWidget *hbox;
     GtkWidget *button;
     GtkWidget *connect_button;
+    GtkWidget *file_button;
     pthread_t recv_thread;
 
     gtk_init(&argc, &argv);
@@ -52,9 +56,24 @@ int main(int argc, char *argv[]) {
     g_signal_connect(button, "clicked", G_CALLBACK(send_message), NULL);
     gtk_box_pack_start(GTK_BOX(hbox), button, FALSE, FALSE, 0);
 
+    file_button = gtk_button_new_with_label("Send File");
+    g_signal_connect(file_button, "clicked", G_CALLBACK(send_file), NULL);
+    gtk_box_pack_start(GTK_BOX(hbox), file_button, FALSE, FALSE, 0);
+    
     connect_button = gtk_button_new_with_label("Connect");
     g_signal_connect(connect_button, "clicked", G_CALLBACK(show_connection_dialog), window);
     gtk_box_pack_start(GTK_BOX(hbox), connect_button, FALSE, FALSE, 0);
+    
+    file_chooser = gtk_file_chooser_dialog_new("Choose File",
+                                              GTK_WINDOW(window),
+                                              GTK_FILE_CHOOSER_ACTION_OPEN,
+                                              "Cancel",
+                                              GTK_RESPONSE_CANCEL,
+                                              "Open",
+                                              GTK_RESPONSE_ACCEPT,
+                                              NULL);
+    gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(file_chooser), FALSE);
+    gtk_file_chooser_set_local_only(GTK_FILE_CHOOSER(file_chooser), TRUE);
 
     gtk_widget_show_all(window);
 
@@ -164,4 +183,51 @@ void send_message(GtkWidget *widget, gpointer data) {
     const gchar *message = gtk_entry_get_text(GTK_ENTRY(entry));
     write(client_socket, message, strlen(message));
     gtk_entry_set_text(GTK_ENTRY(entry), "");
+}
+
+void send_file(GtkWidget *widget, gpointer data) {
+    gint result = gtk_dialog_run(GTK_DIALOG(file_chooser));
+
+    if (result == GTK_RESPONSE_ACCEPT) {
+        const gchar *file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(file_chooser));
+
+        if (file_path == NULL) {
+            g_print("파일을 선택하세요.\n");
+            gtk_widget_hide(file_chooser);
+            return;
+        }
+
+        FILE *file = fopen(file_path, "rb");
+        if (file == NULL) {
+            g_print("파일을 열 수 없습니다.\n");
+            gtk_widget_hide(file_chooser);
+            return;
+        }
+
+        // 파일명만 추출
+        const gchar *file_name = g_path_get_basename(file_path);
+
+        // 서버에게 파일 전송 시작을 알리는 메시지 전송
+        write(client_socket, "/upload", strlen("/upload"));
+
+        // 파일 정보 전송 (파일명, 파일크기)
+        write(client_socket, file_name, BUF_SIZE);
+        fseek(file, 0, SEEK_END);
+        long file_size = ftell(file);
+        fseek(file, 0, SEEK_SET);
+        write(client_socket, &file_size, sizeof(file_size));
+
+        // 파일 전송
+        char file_buffer[FILE_BUF_SIZE];
+        size_t bytesRead;
+        while ((bytesRead = fread(file_buffer, 1, sizeof(file_buffer), file)) > 0) {
+            write(client_socket, file_buffer, bytesRead);
+        }
+
+        fclose(file);
+
+        g_print("파일 전송이 완료되었습니다.\n");
+
+        gtk_widget_hide(file_chooser);
+    }
 }

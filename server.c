@@ -9,6 +9,7 @@
 #include <time.h>
 
 #define BUF_SIZE 100
+#define FILE_BUF_SIZE 256  // 추가: 파일 전송 버퍼 크기
 #define MYPORT 3502
 #define MAX_CLNT 100
 
@@ -16,6 +17,7 @@ void *handle_clnt(void *arg);
 void send_msg(char *msg, int len);
 void error_handling(char *msg);
 char *serverState(int count);
+void send_file(int clnt_sock);  // 추가: 파일 전송 함수
 
 int clnt_cnt = 0;
 int clnt_socks[MAX_CLNT];
@@ -89,8 +91,13 @@ void *handle_clnt(void *arg) {
     send_msg(msg, strlen(msg));
 
     while ((str_len = read(clnt_sock, msg, sizeof(msg))) != 0) {
-        snprintf(msg + str_len, BUF_SIZE - str_len, " [%s]", name);
-        send_msg(msg, str_len + strlen(name) + 3);
+        // 추가: 파일 전송 처리
+        if (strncmp(msg, "/upload", strlen("/upload")) == 0) {
+            send_file(clnt_sock);
+        } else {
+            snprintf(msg + str_len, BUF_SIZE - str_len, " [%s]", name);
+            send_msg(msg, str_len + strlen(name) + 3);
+        }
 
         memset(msg, 0, sizeof(msg));
     }
@@ -141,3 +148,47 @@ char *serverState(int count) {
 
     return stateMsg;
 }
+
+void send_file(int clnt_sock) {
+    char file_name[BUF_SIZE];
+    long file_size;
+
+    // 파일명 수신
+    if (read(clnt_sock, file_name, sizeof(file_name)) <= 0) {
+        perror("read file name error");
+        return;
+    }
+
+    // 파일 크기 수신
+    if (read(clnt_sock, &file_size, sizeof(file_size)) <= 0) {
+        perror("read file size error");
+        return;
+    }
+
+    // 변경된 부분: 파일 저장 경로 설정
+    char upload_path[BUF_SIZE];
+    snprintf(upload_path, sizeof(upload_path), "sendfile/%s", file_name);
+    FILE *file = fopen(upload_path, "wb");
+    if (file == NULL) {
+        perror("file open error");
+        return;
+    }
+
+    // 파일 내용 수신 및 저장
+    char file_buffer[FILE_BUF_SIZE];
+    size_t bytesRead;
+    while (file_size > 0) {
+        bytesRead = read(clnt_sock, file_buffer, sizeof(file_buffer));
+        if (bytesRead <= 0) {
+            perror("read file content error");
+            break;
+        }
+
+        fwrite(file_buffer, 1, bytesRead, file);
+        file_size -= bytesRead;
+    }
+
+    fclose(file);
+    printf("File received: %s\n", upload_path);
+}
+
